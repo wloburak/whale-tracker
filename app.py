@@ -1,5 +1,5 @@
 from bot import create_client
-from db import init_db
+from db import init_db, mark_missed_fdv_snapshots
 from parser import heartbeat
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -19,6 +19,7 @@ def main():
 
     # Initialize DB
     init_db()
+    mark_missed_fdv_snapshots()
     print("✅ Database ready")
 
     # Create Telegram client

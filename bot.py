@@ -1,3 +1,4 @@
+import asyncio
 import html
 import logging
 
@@ -6,6 +7,7 @@ from telethon.tl.types import KeyboardButtonUrl, MessageEntityTextUrl
 
 from config import API_ID, API_HASH, CHANNEL, SOL_THRESHOLD, TARGET_CHANNEL
 from db import insert_trade
+from followup import schedule_fdv_followups
 from parser import extract_mc, extract_sol, extract_ticker, extract_token_address
 from price import get_fdv_usd
 
@@ -155,6 +157,10 @@ def create_client():
                     pool_address=pool_address,
                 )
                 logging.info("Saved to DB (ID: %s)", trade_id)
+                if trade_id and pool_address:
+                    asyncio.create_task(
+                        schedule_fdv_followups(trade_id, pool_address)
+                    )
             except Exception as e:
                 logging.error("DB write failed: %s", e)
 
