@@ -1,0 +1,27 @@
+# Secrets — copy config.example.py to config.py locally
+config.py
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Telethon
+*.session
+*.session-journal
+
+# Local data
+data.db
+*.db-journal
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Generated
+whale_alert_preview.html
