@@ -1,15 +1,20 @@
+import html
+
 from bot import create_client
 from db import init_db, mark_missed_fdv_snapshots
 from parser import heartbeat
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from config import TARGET_CHANNEL
+from config import SOL_THRESHOLD, TARGET_CHANNEL
+
 
 async def send_startup_ping(client):
     now = datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d %H:%M:%S %Z")
+    thr = html.escape(f"{SOL_THRESHOLD} SOL")
     message = (
         "🐋 <b>Whale Tracker</b> is online\n\n"
         f"🕐 <code>{now}</code>\n"
+        f"🎯 Alert threshold: <code>{thr}</code>\n"
         "👀 Listening for whale-sized swaps…"
     )
     await client.send_message(TARGET_CHANNEL, message, parse_mode="html")

@@ -5,7 +5,13 @@ import logging
 from telethon import TelegramClient, events
 from telethon.tl.types import KeyboardButtonUrl, MessageEntityTextUrl
 
-from config import API_ID, API_HASH, CHANNEL, SOL_THRESHOLD, TARGET_CHANNEL
+from config import (
+    API_HASH,
+    API_ID,
+    CHANNEL,
+    SOL_THRESHOLD,
+    TARGET_CHANNEL,
+)
 from db import insert_trade
 from followup import schedule_fdv_followups
 from parser import extract_mc, extract_sol, extract_ticker, extract_token_address
@@ -15,6 +21,46 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
+
+
+def _channel_id_matches(event, want: int) -> bool:
+    """Match config id to Telethon chat_id (-100…), chat.id, or bare channel id."""
+    cid = getattr(event, "chat_id", None)
+    if cid is not None and int(cid) == want:
+        return True
+    inner = getattr(event.chat, "id", None)
+    if inner is not None and int(inner) == want:
+        return True
+    if cid is not None and str(cid).startswith("-100"):
+        try:
+            stripped = int(str(cid)[4:])
+            return stripped == want
+        except ValueError:
+            pass
+    return False
+
+
+def _matches_monitored_channel(event, channel_cfg) -> bool:
+    """
+    Telethon events.NewMessage(chats=username) can fail to match after reconnect.
+    Filter manually: username (case-insensitive) or numeric chat_id.
+    """
+    chat = getattr(event, "chat", None)
+    if chat is None:
+        return False
+    raw = str(channel_cfg).strip()
+    if raw.startswith("@"):
+        raw = raw[1:]
+    if raw.lstrip("-").isdigit():
+        try:
+            want = int(raw)
+        except ValueError:
+            return False
+        return _channel_id_matches(event, want)
+    un = getattr(event.chat, "username", None)
+    if not un:
+        return False
+    return un.lower() == raw.lower()
 
 
 def get_urls_from_message(message):
@@ -58,21 +104,17 @@ def format_whale_alert_html(
 
     lines = [
         "🐋 <b>Whale alert</b>",
-        "",
-        f"📌 <b>Token</b>  <code>${t}</code>",
-        f"💸 <b>Swap</b>   <code>{sol_s} SOL</code>",
-        f"📊 <b>M.C.</b>   {mc_s}",
-        f"💎 <b>FDV</b>    {fdv_s}",
+        ""
     ]
 
     if pool_address:
         pa = html.escape(pool_address)
         chart = html.escape(
-            f"https://www.geckoterminal.com/solana/pools/{pool_address}"
+            f"https://dexscreener.com/solana/{pool_address}"
         )
         lines += [
             "",
-            f'🔗 <a href="{chart}">GeckoTerminal pool</a>',
+            f'🔗 <a href="{chart}">DEX URL</a>',
             f"<code>{pa}</code>",
         ]
 
@@ -87,8 +129,11 @@ def format_whale_alert_html(
 def create_client():
     client = TelegramClient("session", API_ID, API_HASH)
 
-    @client.on(events.NewMessage(chats=CHANNEL))
+    @client.on(events.NewMessage)
     async def handler(event):
+        if not _matches_monitored_channel(event, CHANNEL):
+            return
+
         try:
             logging.info("Event received from Telegram")
 
@@ -125,7 +170,10 @@ def create_client():
             logging.info("ALERT: %s SOL >= %s", sol, SOL_THRESHOLD)
 
             display_ticker = ticker or "UNKNOWN"
-            entry_value = get_fdv_usd(pool_address) if pool_address else None
+            if pool_address:
+                entry_value = await asyncio.to_thread(get_fdv_usd, pool_address)
+            else:
+                entry_value = None
             logging.info("Entry value (FDV USD): %s", entry_value)
 
             alert_html = format_whale_alert_html(
@@ -159,7 +207,15 @@ def create_client():
                 logging.info("Saved to DB (ID: %s)", trade_id)
                 if trade_id and pool_address:
                     asyncio.create_task(
-                        schedule_fdv_followups(trade_id, pool_address)
+                        schedule_fdv_followups(
+                            trade_id,
+                            pool_address,
+                            entry_value,
+                            display_ticker,
+                            client,
+                            TARGET_CHANNEL,
+                            SOL_THRESHOLD,
+                        )
                     )
             except Exception as e:
                 logging.error("DB write failed: %s", e)
