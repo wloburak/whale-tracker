@@ -190,7 +190,6 @@ def create_client():
                 await client.send_message(
                     TARGET_CHANNEL, alert_html, parse_mode="html", link_preview=False
                 )
-                await client.send_message("me", alert_html, parse_mode="html", link_preview=False)
                 logging.info("Message sent")
             except Exception as e:
                 logging.error("Failed to send Telegram message: %s", e)

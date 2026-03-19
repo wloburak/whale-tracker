@@ -55,7 +55,6 @@ async def _send_checkpoint(client, target_channel, msg_html: str) -> None:
         await client.send_message(
             target_channel, msg_html, parse_mode="html", link_preview=False
         )
-        await client.send_message("me", msg_html, parse_mode="html", link_preview=False)
     except Exception as e:
         logger.warning("FDV checkpoint Telegram send failed: %s", e)
 
